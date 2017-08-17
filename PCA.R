@@ -24,7 +24,20 @@ data.null <- data.num[!complete.cases(data.num), ]
 
 data.standardize <- preProcess(data.clean, method = "BoxCox")
 data.trans <- predict(data.standardize, data.clean)
-M <- cor(data.trans)
+
+
+# Spliting training and testing dataset
+
+# Spliting training and testing dataset
+index = sample( 1:nrow( data.trans ), nrow( data.trans ) * 0.6, replace = FALSE ) 
+
+trainset = data.trans[ index, ]
+test = data.trans[ -index, ]
+
+
+data.train<-trainset%>%select(-imdb_score)
+data.test<-test
+M <- cor(data.train)
 
 # corrplot(
 #   M,
@@ -49,5 +62,6 @@ ggcorrplot(
   colors = c("#6D9EC1", "white", "#E46726"),
   lab = T
 )
+
 
 

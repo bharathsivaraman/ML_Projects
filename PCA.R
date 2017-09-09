@@ -7,61 +7,139 @@ library(e1071)
 library(caret)
 library(corrplot)
 library(ggcorrplot)
-
-
+library(Hmisc)
+library(missForest)
+library(dummies)
+library(rpart)
 #AppliedPredictiveModeling::scriptLocation()
-data <-
-  read.csv("C:\\Users\\sivarbh\\Documents\\COE\\movie_metadata.csv")
+data.train <-
+  read.csv("C:\\Users\\sivarbh\\Documents\\ML_Projects\\Train_Mart.csv")
+
+data.test <-
+  read.csv("C:\\Users\\sivarbh\\Documents\\ML_Projects\\Test_Mart.csv")
 
 ##Data Pre Processing##
 
-num <- sapply(data, is.numeric)
-data.num <- data[num == TRUE]
+#combine test and train
 
-#Seperate NA's for analysis
-data.clean <- data.num[complete.cases(data.num), ]
-data.null <- data.num[!complete.cases(data.num), ]
+data.test$Item_Outlet_Sales <- 1
 
-data.standardize <- preProcess(data.clean, method = "BoxCox")
-data.trans <- predict(data.standardize, data.clean)
+data <- rbind(data.train, data.test)
 
 
-# Spliting training and testing dataset
+#data imputation using HMISC package#
 
-# Spliting training and testing dataset
-index = sample( 1:nrow( data.trans ), nrow( data.trans ) * 0.6, replace = FALSE ) 
+summary(data)
 
-trainset = data.trans[ index, ]
-test = data.trans[ -index, ]
+#impute with mean
+data$Item_Weight <- with(data, impute(Item_Weight, median))
 
+#check for null
+data.null <- data[!complete.cases(data), ]
+summary(data.null)
 
-data.train<-trainset%>%select(-imdb_score)
-data.test<-test
-M <- cor(data.train)
-
-# corrplot(
-#   M,
-#   method = "color",
-#   outline = T,
-#   addgrid.col = "darkgray",
-#   order = "hclust",
-#   addrect = 3,
-#  # rect.lwd = 5,
-#  # cl.pos = "b",
-#   tl.col = "indianred4",
-#   addCoef.col = "white",
-#   number.digits = 2,
-#   number.cex = 0.75
-# )
-ggcorrplot(
-  M,
-  hc.order = TRUE,
-  type = "lower",
-  outline.col = "white",
-  ggtheme = ggplot2::theme_gray,
-  colors = c("#6D9EC1", "white", "#E46726"),
-  lab = T
-)
+#data clean up
 
 
+table(data$Outlet_Size, data$Outlet_Type)
+#levels(data$Outlet_Size)[1] <- "Other"
 
+data <-
+  data %>%
+  mutate(
+    Item_Fat_Content = ifelse(
+      as.character(Item_Fat_Content) %in% c("LF", "low fat"),
+      "Low Fat",
+      ifelse (
+        as.character(Item_Fat_Content) %in% c("reg", "Regular"),
+        "Regular",
+        as.character(Item_Fat_Content)
+      )
+      
+    ),
+    Item_Visibility = ifelse(
+      Item_Visibility == 0,
+      median(Item_Visibility),
+      data$Item_Visibility
+    ),
+    Outlet_Size = ifelse(
+      as.character(Outlet_Size) == "",
+      "Other",
+      as.character(Outlet_Size)
+    )
+  )
+data$Item_Fat_Content <- with(data, as.factor(Item_Fat_Content))
+summary(data)
+
+
+#remove dependent variable and identifiers
+
+#hotencoding factors into numericals
+
+
+#
+# num <- sapply(data.new, is.numeric)
+# data.num <- data.new[num == TRUE]
+#
+#
+data.new <-
+  data %>% select(-c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier))
+data.new[sapply(data.new, is.factor)] <-
+  lapply(data.new[sapply(data.new, is.factor)], as.character)
+
+
+data.new <-
+  dummy.data.frame(
+    data.new,
+    names = c(
+      "Item_Fat_Content",
+      "Item_Type",
+      "Outlet_Size",
+      "Outlet_Location_Type",
+      "Outlet_Type"
+    )
+  )
+
+#
+# data.standardize <- preProcess(data.num, method = "BoxCox")
+# data.model <- predict(data.standardize, data.num)
+
+# PCA
+
+pca.train <- data.new[1:nrow(data.train), ]
+pca.test <- data.new[-(1:nrow(data.test)), ]
+
+
+
+pca = prcomp(pca.train, scale = T)
+names(pca)
+
+pca$rotation
+
+x<-pca$rotation
+
+ # variance
+
+std_dev <- pca$sdev
+pr_var = (pca$sdev) ^ 2
+
+# % of variance
+prop_varex = pr_var / sum(pr_var)
+
+# Plot
+
+
+plot(prop_varex,
+     xlab = "Principal Component",
+     ylab = "Proportion of Variance Explained",
+     type = "b")
+
+plot(cumsum(prop_varex))
+
+train.data<-data.frame(Item_Outlet_Sales=data.train$Item_Outlet_Sales,pca$x)
+
+  
+rpart.model<-rpart(Item_Outlet_Sales~.,data=train.data,method="anova")
+
+fancyRpartPlot(rpart.model,main=paste('RPART:'),sub=cName)
+plotcp(rpat.model)

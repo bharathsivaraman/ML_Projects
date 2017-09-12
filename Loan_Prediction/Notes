@@ -1,0 +1,44 @@
+Notes for Loan Prediction
+
+Loan Status is the dependent variable. This is a classification problem
+
+Hypostehsis: Variables that can possibly predict (before looking at the dataset)
+1. Income level
+2. Credit score
+3. First time loan buyer
+4. Single/ Married
+5. Gender
+6. Mortgage Value
+7. Home owner
+8. Education
+9. Loan Amount
+
+Thoughts on Dataset: Very small dataset. Challenge will be to find a model that can predict with this small a dataset
+
+
+
+
+Data set: Variables with NAs
+
+1. Gender
+2. Married
+3. Dependents
+4. Self Employed
+5. Loan Amount
+6. Loan Amount Term
+7. Credit History
+
+Applicant income is 0. Quite weird, will check to see if they are classified as N. If not impute with Median within group
+
+Strategy to  handle NA
+
+1. Gender - Find the average applicant income for each Gender and  fill up Gender based on the applicant income
+2. Married-  When Dependent is No or null make married as No
+3. Dependent -  No Clean trend among data. 
+4. Self Employed - - Mean Applicant income
+5. Plot Income vs Loan amount and check trend and impute
+6. Plot for loan amount term and then impute
+
+Base line model: Base line RF with 6 trees gave a score of 0.53. This is the base model
+
+

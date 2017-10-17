@@ -1,11 +1,13 @@
 #load required libraries function
 
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
 
-packages <- c("dplyr", "caret", "ggplot2", "lazyeval")
-lapply(packages, require, character.only = TRUE)
-
-#load required libraries function
-
+# usage
 
 packages <-
   c("dplyr",
@@ -16,6 +18,12 @@ packages <-
     "lift",
     "RANN",
     "pROC","ROCR")
+
+ipak(packages)
+
+#load required libraries function
+
+
 lapply(packages, require, character.only = TRUE)
 
 

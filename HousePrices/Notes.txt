@@ -1,0 +1,22 @@
+Predictingt the house prices for boston
+
+Hypotheis: Factors that might affect house prices
+
+1. Area of the house
+2. Neighbourhood
+3. Near downtown?
+4. Accessibility to Public Transport
+5. Accessibility to shops
+6. School district
+7. Race Profile of the neighbourhood
+8. Parking, Garage, accessbility to health and fitness centres
+9. Age profile of the neighbourhood
+10. Age of the house
+11. Pool, number of baths, basement, attic
+
+EDA:
+
+Select top 2 Neighbourhoods
+Select bottom 2 neighbourhoods
+
+

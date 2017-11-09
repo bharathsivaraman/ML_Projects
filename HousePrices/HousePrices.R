@@ -34,14 +34,31 @@ ipak(packages)
 
 train <- read.csv("train.csv")
 test <- read.csv("test.csv")
-str(train)
+test$SalePrice <- 1
+combined <- rbind(train, test)
 
 
-# EDA - Factor Variables --------------------------------------------------
+# EDA - Feature Engineering --------------------------------------------------
 
-#Check for NA
+#Check for NA and remove columns where more than 40% are NA
 
-x<-complete.cases(train)
+threshold <- nrow(combined) * .4
+
+colnames <- "id"
+
+for (i in 1:ncol(combined)) {
+  x <- combined[!complete.cases(combined[i]), ][i]
+  
+  if (nrow(x) > threshold) {
+    colnames <- rbind(colnames, colnames(x))
+  }
+  
+}
+colnames <- colnames[-1]
+
+combined <- combined %>% select(-one_of(colnames))
+
+
 
 
 
@@ -49,11 +66,10 @@ x<-complete.cases(train)
 ggplot(train) + aes(SalePrice) + geom_histogram(col = "white") + theme_light()
 ggplot(train) + aes(log(SalePrice)) + geom_histogram(col = "white", fill =
                                                        "firebrick") + theme_light()
-train$MSSubClass<-as.factor(train$MSSubClass)
+train$MSSubClass <- as.factor(train$MSSubClass)
 
 continuous.variable <- train[, lapply(train, is.numeric) == TRUE]
-
-continuous.variable<-continuous.variable[-1]
+continuous.variable <- continuous.variable[-1]
 
 factor.variables <- train[, lapply(train, is.factor) == TRUE]
 factor.variables$SalePrice <- train$SalePrice
@@ -70,27 +86,28 @@ impute.mean <-
     replace(x, is.na(x), mean(x, na.rm = TRUE))
 
 #continuous.variable$YearBuilt<-as.factor(continuous.variable$YearBuilt)
-continuous.variable <-continuous.variable %>% group_by(YearBuilt) %>% mutate(SalePrice =
-                                                                      impute.mean(SalePrice)) %>% ungroup()
+continuous.variable <-
+  continuous.variable %>% group_by(YearBuilt) %>% mutate(SalePrice =
+                                                           impute.mean(SalePrice)) %>% ungroup()
 
-predictors<-SalePrice ~ .
+predictors <- SalePrice ~ .
 
 trcntrl <- trainControl(
   method = "repeatedcv",
   number = 10,
   repeats = 3,
   summaryFunction = twoClassSummary,
-  classProbs = TRUE, savePredictions = TRUE
+  classProbs = TRUE,
+  savePredictions = TRUE
 )
 
-baselineLM<-train(
-  predictors,A=
-  data = continuous.variable,
+baselineLM <- train(
+  predictors,
+  A =
+    data = continuous.variable,
   method = "lm",
   trControl = trcntrl,
   tuneLength = 5 ,
   metric = "Accuracy",
   preProcess = c("center", "scale")
 )
-
-

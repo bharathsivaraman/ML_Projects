@@ -1,8 +1,10 @@
 #HousePrices comptetion on Kaggle#
-##Predict Sales Prices in Boston##
+##Predict Sales Prices in Iowa##
 
+##setwd("C:\\Users\\sivarbh\\Documents\\ML_Projects\\Houseprices")
 
-
+##test <- read.csv("test.csv")
+##train <- read.csv("train.csv")
 
 # LoadPackages/files ------------------------------------------------------
 
@@ -36,11 +38,22 @@ str(train)
 
 
 # EDA - Factor Variables --------------------------------------------------
-##SalePrice is right skewed and taking log removes the skewness
-ggplot(train)+aes(SalePrice)+geom_histogram(col="white")+theme_light()
-ggplot(train)+aes(log(SalePrice))+geom_histogram(col="white")+theme_light()
 
-continuous.variable<-train[, lapply(train, is.numeric) == TRUE]
+#Check for NA
+
+x<-complete.cases(train)
+
+
+
+##SalePrice is right skewed and taking log removes the skewness
+ggplot(train) + aes(SalePrice) + geom_histogram(col = "white") + theme_light()
+ggplot(train) + aes(log(SalePrice)) + geom_histogram(col = "white", fill =
+                                                       "firebrick") + theme_light()
+train$MSSubClass<-as.factor(train$MSSubClass)
+
+continuous.variable <- train[, lapply(train, is.numeric) == TRUE]
+
+continuous.variable<-continuous.variable[-1]
 
 factor.variables <- train[, lapply(train, is.factor) == TRUE]
 factor.variables$SalePrice <- train$SalePrice
@@ -48,28 +61,36 @@ factor.variables$SalePrice <- train$SalePrice
 ##Neighbourhood
 ggplot(factor.variables) + aes(Neighborhood, SalePrice) + geom_boxplot()
 
-##YearBuild
-ggplot(train) + aes(YearBuilt, SalePrice) + geom_point()
 
+#Baseline Model----
+##Baseline model built on averaging the price across neighbourhood
 
-x <-
-  factor.variables %>% group_by(Neighborhood) %>% summarise(avg.salesprice = mean(SalePrice)) %>%
-  mutate(rnk = rank((avg.salesprice)))
+impute.mean <-
+  function(x)
+    replace(x, is.na(x), mean(x, na.rm = TRUE))
 
-x.top2 <- x %>% select(1) %>% top_n(2)
-x.top2$Neighborhood <- as.character(x.top2$Neighborhood)
-x.bottom2 <- x %>% select(1) %>% top_n(-2)
-x.bottom2$Neighborhood <- as.character(x.bottom2$Neighborhood)
+#continuous.variable$YearBuilt<-as.factor(continuous.variable$YearBuilt)
+continuous.variable <-continuous.variable %>% group_by(YearBuilt) %>% mutate(SalePrice =
+                                                                      impute.mean(SalePrice)) %>% ungroup()
 
-neighbourhood <-
-  train %>% filter(
-    as.character(Neighborhood) %in% x.top2$Neighborhood |
-      Neighborhood %in% x.bottom2$Neighborhood
-  )
+predictors<-SalePrice ~ .
 
-neighbourhood$Neighborhood <-
-  as.character(neighbourhood$Neighborhood)
+trcntrl <- trainControl(
+  method = "repeatedcv",
+  number = 10,
+  repeats = 3,
+  summaryFunction = twoClassSummary,
+  classProbs = TRUE, savePredictions = TRUE
+)
 
-table(neighbourhood$Neighborhood, neighbourhood$YearBuilt)
-table(neighbourhood$Neighborhood, neighbourhood$Utilities)
+baselineLM<-train(
+  predictors,A=
+  data = continuous.variable,
+  method = "lm",
+  trControl = trcntrl,
+  tuneLength = 5 ,
+  metric = "Accuracy",
+  preProcess = c("center", "scale")
+)
+
 

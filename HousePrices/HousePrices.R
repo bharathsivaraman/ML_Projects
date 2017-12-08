@@ -20,15 +20,18 @@ ipak <- function(pkg) {
 # usage
 
 packages <-
-  c("dplyr",
+  c(
+    "dplyr",
     "caret",
     "ggplot2",
+    "e1071",
     "lazyeval",
     "plotROC",
     "lift",
     "RANN",
     "pROC",
-    "ROCR")
+    "ROCR"
+  )
 
 ipak(packages)
 
@@ -43,8 +46,18 @@ impute.median <-
   function(x)
     replace(x, is.na(x), median(x, na.rm = TRUE))
 
+Histplots <- function(column) {
+  g <-
+    ggplot(train.continuous, aes_string(x = column)) + geom_histogram(col = "white", fill = "firebrick") + theme_light()
+  
+  print(g)
+}
 
 # EDA - Feature Engineering --------------------------------------------------
+
+
+## Factor Variables --------------------------------------------------------
+
 
 #Check for NA and remove columns where more than 40% are NA
 
@@ -71,13 +84,25 @@ combined$YearRemodAdd <- as.factor(combined$YearRemodAdd)
 combined$GarageYrBlt <- as.factor(combined$GarageYrBlt)
 combined$YrSold <- as.factor(combined$YrSold)
 combined$MSSubClass <- as.factor(combined$MSSubClass)
+combined$MoSold <- as.factor(combined$MoSold)
+
+
+# combined$HalfBath <- as.factor(combined$HalfBath)
+# combined$BsmtHalfBath <- as.factor(combined$BsmtHalfBath)
+# combined$BsmtFullBath <- as.factor(combined$BsmtFullBath)
+# combined$LowQualFinSF <- as.factor(combined$LowQualFinSF)
+# combined$GarageCars <- as.factor(combined$GarageCars)
+# combined$KitchenAbvGr <- as.factor(combined$KitchenAbvGr)
+# combined$Fireplaces <- as.factor(combined$Fireplaces)
+# combined$FullBath <- as.factor(combined$FullBath)
+
 
 #get factor columns
 factor.variables <- combined[, lapply(combined, is.factor) == TRUE]
 
 factor.variables$SalePrice <- combined$SalePrice
 
-##-------- Check freq and dis of every level in each column
+## Check freq and dis of every level in each column ------------
 data.levels <- data.frame(
   colname = "x",
   levels = 1,
@@ -139,7 +164,7 @@ data.levels <-
 data.levels <-
   data.levels %>% mutate(newlevel = ifelse(cumDist < 5, "Other", as.character(Var1)))
 
-####----- Merge levels where distribution is less than 5%
+## Merge levels where distribution is less than 5% --------------------
 
 new <- factor.variables
 new[] <-
@@ -149,7 +174,16 @@ factor.variables <- new[-38]
 factor.variables <- lapply(factor.variables, as.factor)
 factor.variables <- as.data.frame(factor.variables)
 
-##-----------Check for NA's in continuous variables and impute
+####-- Split train and test records and perform onehotencoding on train data set
+### OnehotEncoding ----------------------------------------------------------
+
+
+
+## Continuous Variables ----------------------------------------------------
+
+
+
+## Check for NA's in continuous variables and impute -----------
 continuous.variables <-
   combined[, lapply(combined, is.numeric) == TRUE]
 continuous.variables <- continuous.variables[,-1]
@@ -160,7 +194,136 @@ for (i in 1:ncol(continuous.variables))
     impute.median(continuous.variables[[i]])
 }
 
+for (i in 1:ncol(continuous.variables))
+{
+  colname <- colnames(continuous.variables[i])
+  
+  Histplots(colname)
+  
+}
 
+
+table(continuous.variables$MiscVal) #--Remove variable
+table(continuous.variables$PoolArea)#--Remove variable
+
+table(continuous.variables$WoodDeckSF)
+table(continuous.variables$MasVnrArea)
+table(continuous.variables$OverallCond)
+table(continuous.variables$OverallQual)
+
+
+
+##convert as ordered factor overall condition and overall qual
+
+continuous.variables$OverallCond <-
+  factor(
+    continuous.variables$OverallCond,
+    levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9),
+    ordered = TRUE
+  )
+
+
+continuous.variables$OverallQual <-
+  factor(
+    continuous.variables$OverallQual,
+    levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+    ordered = TRUE
+  )
+
+#combine All Porches and remove individual porches
+continuous.variables <-
+  continuous.variables %>% mutate(totalporch = ScreenPorch + X3SsnPorch +
+                                    EnclosedPorch + OpenPorchSF)
+
+##Number of floors  and remove seperate floor area
+
+
+continuous.variables <-
+  continuous.variables %>% mutate(nmbroffloors =
+                                    ifelse(
+                                      X1stFlrSF != 0 &
+                                        X2ndFlrSF == 0,
+                                      1,
+                                      ifelse(X1stFlrSF != 0 &
+                                               X2ndFlrSF != 0, 2, 0)
+                                    ))
+
+
+
+#Remove these variables
+#MiscVal,PoolArea,BsmtFinSF2,LowQualFinSF,ScreenPorch,X3SsnPorch,EnclosedPorch,OpenPorchSF,X1stFlrSF,X2ndFlrSF
+
+
+
+#Apply log to the following variables
+#LotArea,#LotFrontage,#SalePrice,#GarageArea,GrLivArea,BsmtUnfSF,TotalBsmtSF,WoodDeckSF
+
+continuous.variables <-
+  continuous.variables %>% select(
+    -one_of(
+      "MiscVal",
+      "PoolArea",
+      "BsmtFinSF2",
+      "LowQualFinSF",
+      "ScreenPorch",
+      "X3SsnPorch",
+      "EnclosedPorch",
+      "OpenPorchSF",
+      "X1stFlrSF",
+      "X2ndFlrSF"
+    )
+  )
+
+
+scale.colname <-
+  c(
+    "LotArea",
+    "LotFrontage",
+    "GarageArea",
+    "GrLivArea",
+    "BsmtUnfSF",
+    "TotalBsmtSF",
+    "WoodDeckSF"
+  )
+
+transform <- log(continuous.variables$LotArea)
+continuous.variables$LotArea <-
+  predict(transform, continuous.variables$LotArea)
+Histplots("LotArea")
+
+transform <- BoxCoxTrans(continuous.variables$LotFrontage)
+continuous.variables$LotFrontage <-
+  predict(transform, continuous.variables$LotFrontage)
+Histplots("LotFrontage")
+
+transform <- BoxCoxTrans(continuous.variables$GarageArea)
+continuous.variables$GarageArea <-
+  predict(transform, continuous.variables$GarageArea)
+Histplots("GarageArea")
+
+transform <- BoxCoxTrans(continuous.variables$GrLivArea)
+continuous.variables$GrLivArea <-
+  predict(transform, continuous.variables$GrLivArea)
+Histplots("GrLivArea")
+
+
+transform <- BoxCoxTrans(continuous.variables$BsmtUnfSF)
+continuous.variables$BsmtUnfSF <-
+  predict(transform, continuous.variables$BsmtUnfSF)
+Histplots("BsmtUnfSF")
+
+
+transform <- BoxCoxTrans(continuous.variables$TotalBsmtSF)
+continuous.variables$TotalBsmtSF <-
+  predict(transform, continuous.variables$TotalBsmtSF)
+
+transform <- BoxCoxTrans(continuous.variables$WoodDeckSF)
+continuous.variables$WoodDeckSF <-
+  predict(transform, continuous.variables$WoodDeckSF)
+
+summary(continuous.variables)
+
+##Combine continuous and factor variables
 combined.clean <- cbind(factor.variables, continuous.variables)
 combined.clean$Id <- combined$Id
 combined.NA <- combined.clean[!complete.cases(combined.clean), ]
@@ -169,12 +332,6 @@ summary(combined.clean)
 
 train.predict <- combined.clean %>% filter(Id %in% train[["Id"]])
 test.predict <- combined.clean %>% filter(Id %in% test[["Id"]])
-
-##SalePrice is right skewed and taking log removes the skewness
-ggplot(train.predict) + aes(SalePrice) + geom_histogram(col = "white") + theme_light()
-ggplot(train.predict) + aes(log(SalePrice)) + geom_histogram(col = "white", fill = "firebrick") + theme_light()
-
-train.predict$SalePrice <- log(train.predict$SalePrice)
 
 
 # Baseline Model--------------------------------------------------
@@ -204,4 +361,3 @@ baselineLM <- train(
 )
 
 baseline <- predict(baselineLM, test.predict)
-

@@ -1,6 +1,11 @@
 #HousePrices comptetion on Kaggle#
 ##Predict Sales Prices in Iowa##
 
+## Data Set has Factor variables, count discriptors, continuous variables, time series variables 
+
+
+
+
 ##setwd("C:\\Users\\sivarbh\\Documents\\ML_Projects\\Houseprices")
 
 ##test <- read.csv("test.csv")
@@ -60,33 +65,7 @@ readinteger <- function()
   n <- readline(prompt = "Enter an integer: ")
   return(as.integer(n))
   
-}
-
-
-
-
-model.predict <-
-  function(trcntrl,
-           predictors,
-           modeltype,
-           traindata,
-           metric)  {
-    set.seed(1234)
-    
-    modelout <-    train(
-      predictors,
-      data = traindata,
-      method = modeltype,
-      trControl = trcntrl,
-      tuneLength = 5 ,
-      metric = metric,
-      preProcess = c("center", "scale"),
-      tuneGrid = tunegrid
-    )
-    
-    return(modelout)
-    
-  }
+}  
 
 # EDA - Feature Engineering --------------------------------------------------
 
@@ -101,7 +80,7 @@ threshold <- nrow(combined) * .4
 colnames <- "id"
 
 for (i in 1:ncol(combined)) {
-  x <- combined[!complete.cases(combined[i]),][i]
+  x <- combined[!complete.cases(combined[i]), ][i]
   
   if (nrow(x) > threshold) {
     colnames <- rbind(colnames, colnames(x))
@@ -121,7 +100,7 @@ combined$YrSold <- as.factor(combined$YrSold)
 combined$MSSubClass <- as.factor(combined$MSSubClass)
 combined$MoSold <- as.factor(combined$MoSold)
 
- 
+
 #get factor columns
 factor.variables <- combined[, lapply(combined, is.factor) == TRUE]
 
@@ -170,7 +149,7 @@ for (i in 1:(ncol(factor.variables) - 1))
 
 rm(data.levels.tmp)
 rm(x)
-data.levels <- data.levels[-1,]
+data.levels <- data.levels[-1, ]
 data.levels$Dist <-
   (data.levels$Freq / nrow(factor.variables)) * 100
 
@@ -209,16 +188,17 @@ for (i in (1:length(nearzero))) {
   x <- colnames(factor.variables)[nearzero[[i]]]
   nearzerocolnames <- rbind(nearzerocolnames, x)
 }
-nearzerocolnames<-nearzerocolnames[-1]
-factor.variables <- factor.variables%>%select(-one_of(nearzerocolnames))
+nearzerocolnames <- nearzerocolnames[-1]
+factor.variables <-
+  factor.variables %>% select(-one_of(nearzerocolnames))
 
-##remove year column to remove time series
-
-factor.variables<-factor.variables%>%select(-contains("year"),-contains("yr"),-contains("Mo"))
-
-  
+# ##remove year column to remove time series
+#
+# factor.variables<-factor.variables%>%select(-contains("year"),-contains("yr"),-contains("Mo"))
+#
+#
 ####-- Split train and test records and perform onehotencoding on train data set
-  ### OnehotEncoding ----------------------------------------------------------
+### OnehotEncoding ----------------------------------------------------------
 
 dmy <- dummyVars(" ~ .", data = factor.variables)
 trsf <- data.frame(predict(dmy, newdata = factor.variables))
@@ -227,7 +207,7 @@ trsf <- data.frame(predict(dmy, newdata = factor.variables))
 ## Check for NA's in continuous variables and impute -----------
 continuous.variables <-
   combined[, lapply(combined, is.numeric) == TRUE]
-continuous.variables <- continuous.variables[, -1]
+continuous.variables <- continuous.variables[,-1]
 
 for (i in 1:ncol(continuous.variables))
 {
@@ -244,13 +224,6 @@ for (i in 1:ncol(continuous.variables))
 }
 
 
-table(continuous.variables$MiscVal) #--Remove variable
-table(continuous.variables$PoolArea)#--Remove variable
-
-table(continuous.variables$WoodDeckSF)#-Remove variable
-table(continuous.variables$MasVnrArea)
-table(continuous.variables$OverallCond)
-table(continuous.variables$OverallQual)
 
 
 #
@@ -288,20 +261,40 @@ continuous.variables <-
                                       ifelse(X1stFlrSF != 0 &
                                                X2ndFlrSF != 0, 2, 0)
                                     ))
+#
+# #PriceperSqft
+#
+# continuous.variables<-continuous.variables%>%mutate(pricesqft=SalePrice/LotArea)
+#
 
-#PriceperSqft
 
-continuous.variables<-continuous.variables%>%mutate(pricesqft=SalePrice/LotArea)
 
+#Remove Non Zero Var
+nearzero <- nearZeroVar(continuous.variables)
+nearzerocolnames <- NA
+for (i in (1:length(nearzero))) {
+  x <- colnames(continuous.variables)[nearzero[[i]]]
+  nearzerocolnames <- rbind(nearzerocolnames, x)
+}
+nearzerocolnames <- nearzerocolnames[-1]
+continuous.variables <-
+  continuous.variables %>% select(-one_of(nearzerocolnames))
+
+#Find collinearity
+M <- cor(continuous.variables)
+corrplot(M, method = "circle")
+
+findCorrelation(M, cutoff = 0.75, verbose = TRUE)
+
+
+#There is not much colinearity betweeb variables. Removing TotalRmsabvgrnd and Numberof Garage cars
+
+
+summary(continuous.variables)
 
 
 #Remove these variables
 #MiscVal,PoolArea,BsmtFinSF2,LowQualFinSF,ScreenPorch,X3SsnPorch,EnclosedPorch,OpenPorchSF,X1stFlrSF,X2ndFlrSF,BsmtUnfSF,BsmtFinSF1
-
-
-
-#Apply log to the following variables
-#LotArea,#LotFrontage,#SalePrice,#GarageArea,GrLivArea,BsmtUnfSF,TotalBsmtSF,WoodDeckSF
 
 continuous.variables <-
   continuous.variables %>% select(
@@ -315,22 +308,15 @@ continuous.variables <-
       "EnclosedPorch",
       "OpenPorchSF",
       "X1stFlrSF",
-      "X2ndFlrSF","BsmtFinSF1","BsmtUnfSF",
-      "WoodDeckSF",
+      "X2ndFlrSF",
+      "BsmtFinSF1",
+      "BsmtUnfSF",
+      "WoodDeckSF"
     )
   )
 
-#
-# scale.colname <-
-#   c(
-#     "LotArea",
-#     "LotFrontage",
-#     "GarageArea",
-#     "GrLivArea",
-#     "BsmtUnfSF",
-#     "TotalBsmtSF",
-#     "WoodDeckSF"
-#   )
+#Apply log to the following variables
+#LotArea,#LotFrontage,#SalePrice,#GarageArea,GrLivArea,BsmtUnfSF,TotalBsmtSF,WoodDeckSF
 #
 
 continuous.variables$LotArea <-
@@ -358,24 +344,24 @@ continuous.variables$TotalBsmtSF <-
 Histplots("TotalBsmtSF")
 
 
-M <- cor(corframe)
-corrplot(M, method = "circle")
-
-summary(continuous.variables)
-
+#
+# for (i in 1:ncol(continuous.variables)){
+# x<-BoxCoxTrans(continuous.variables[[i]])
+# continuous.variables[[i]]<-predict(x,continuous.variables[[i]])
+# }
 ##Combine continuous and factor variables
 
 ##with one hot encoding
 
-encode <- readinteger()
+encode.onehot <- readinteger()
 
-if (encode == 1) {
+if (encode.onehot == 1) {
   combined.clean <- cbind(trsf, continuous.variables)
 } else {
   combined.clean <- cbind(factor.variables, continuous.variables)
 }
 combined.clean$Id <- combined$Id
-combined.NA <- combined.clean[!complete.cases(combined.clean),]
+combined.NA <- combined.clean[!complete.cases(combined.clean), ]
 summary(combined.clean)
 
 
@@ -385,9 +371,8 @@ test.predict <- combined.clean %>% filter(Id %in% test[["Id"]])
 
 
 
-# Baseline Models--------------------------------------------------
-##Baseline model built on averaging the price across neighbourhood
-
+# Model Building --------------------------------------------------
+## Try out different models with CV and tuning parameters
 train.predict <- train.predict %>% select(-one_of("Id"))
 
 predictors <- SalePrice ~ .
@@ -415,7 +400,7 @@ baselineLM <- train(
 trcntrl.ridge <- trainControl(method = "cv",
                               number = 10)
 # Set seq of lambda to test
-lambdaGrid <- expand.grid(lambda = 10 ^ seq(10, -2, length = 100))
+lambdaGrid <- expand.grid(lambda = 10 ^ seq(10,-2, length = 100))
 set.seed(1234)
 ridge <- train(
   predictors,
@@ -442,21 +427,28 @@ lasso <- train(
   trControl = trcntrl.ridge,
   tuneGrid = tuneGrid
 )
-#Model Evaluation-----
+
+#GBM
+predictors <- SalePrice ~ .
 
 
+gbmGrid <-  expand.grid(
+  interaction.depth = c(1, 5, 9),
+  n.trees = (1:30) * 50,
+  shrinkage = 0.1,
+  n.minobsinnode = 20
+)
+set.seed(1234)
+gbm <- train(
+  predictors,
+  data = train.predict,
+  method = 'gbm',
+  trControl = trcntrl.ridge,
+  tuneGrid = gbmGrid
+)
 
-
-##Output------
-ridge.model <- predict(ridge, test.predict)
-ridge.model <- as.data.frame(ridge.model)
-ridge.model <-
-  data.frame(id = test$Id, SalePrice = ridge.model$ridge.model)
-write.csv(ridge.model, "ridge.model.csv", row.names = FALSE)
-
-
-lasso.model <- predict(lasso, test.predict)
-lasso.model <- as.data.frame(lasso.model)
-lasso.model <-
-  data.frame(id = test$Id, SalePrice = lasso.model$lasso.model)
-write.csv(lasso.model, "lasso.model.csv", row.names = FALSE)
+gbm.model <- predict(gbm, test.predict)
+gbm.model <- as.data.frame(gbm.model)
+gbm.model <-
+  data.frame(id = test$Id, SalePrice = gbm.model$gbm.model)
+write.csv(gbm.model, "gbm.model.csv", row.names = FALSE)

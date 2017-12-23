@@ -1,7 +1,7 @@
 #HousePrices comptetion on Kaggle#
 ##Predict Sales Prices in Iowa##
 
-## Data Set has Factor variables, count discriptors, continuous variables, time series variables 
+## Data Set has Factor variables, count discriptors, continuous variables, time series variables
 
 
 
@@ -65,7 +65,7 @@ readinteger <- function()
   n <- readline(prompt = "Enter an integer: ")
   return(as.integer(n))
   
-}  
+}
 
 # EDA - Feature Engineering --------------------------------------------------
 
@@ -80,7 +80,7 @@ threshold <- nrow(combined) * .4
 colnames <- "id"
 
 for (i in 1:ncol(combined)) {
-  x <- combined[!complete.cases(combined[i]), ][i]
+  x <- combined[!complete.cases(combined[i]),][i]
   
   if (nrow(x) > threshold) {
     colnames <- rbind(colnames, colnames(x))
@@ -92,19 +92,31 @@ colnames <- colnames[-1]
 ##Remove columns with more than 40%NA
 combined <- combined %>% select(-one_of(colnames))
 
-#convert into factors
-combined$YearBuilt <- as.factor(combined$YearBuilt)
-combined$YearRemodAdd <- as.factor(combined$YearRemodAdd)
-combined$GarageYrBlt <- as.factor(combined$GarageYrBlt)
-combined$YrSold <- as.factor(combined$YrSold)
+
 combined$MSSubClass <- as.factor(combined$MSSubClass)
-combined$MoSold <- as.factor(combined$MoSold)
-
-
 #get factor columns
 factor.variables <- combined[, lapply(combined, is.factor) == TRUE]
 
 factor.variables$SalePrice <- combined$SalePrice
+
+##remove ordinal factors from data imputation
+
+factor.variables <-
+  factor.variables %>% select(
+    -one_of(
+      "OverallCond",
+      "OverallQual",
+      "ExterQual",
+      "ExterCond",
+      "GarageQual",
+      "GarageCond",
+      "BsmtQual",
+      "BsmtCond",
+      "HeatingQC",
+      "KitchenQual"
+    )
+  )
+
 
 ## Check freq and dis of every level in each column ------------
 data.levels <- data.frame(
@@ -139,8 +151,8 @@ for (i in 1:(ncol(factor.variables) - 1))
   
   
   x <-
-    factor.variables %>% select(i, ncol(factor.variables)) %>% group_by_(colname.group) %>% summarize(AvgSalePrice =
-                                                                                                        mean(SalePrice)) %>%
+    factor.variables %>% select(i, ncol(factor.variables)) %>% group_by_(colname.group) %>% dplyr::summarise(AvgSalePrice =
+                                                                                                               mean(SalePrice)) %>%
     rename_(Var1 = colname.group)
   data.levels.tmp <- data.levels.tmp %>% inner_join(x, "Var1")
   
@@ -149,7 +161,7 @@ for (i in 1:(ncol(factor.variables) - 1))
 
 rm(data.levels.tmp)
 rm(x)
-data.levels <- data.levels[-1, ]
+data.levels <- data.levels[-1,]
 data.levels$Dist <-
   (data.levels$Freq / nrow(factor.variables)) * 100
 
@@ -158,6 +170,7 @@ colname.remove <-
 
 colname.remove <- as.vector(colname.remove$colname)
 
+##Remove columns where distribution of levels  is more than 95%
 
 factor.variables <-
   factor.variables %>% select(-one_of(colname.remove))
@@ -176,9 +189,139 @@ new <- factor.variables
 new[] <-
   lapply(factor.variables, function(x)
     data.levels$newlevel[match(x, data.levels$Var1)])
-factor.variables <- new[-38]
+factor.variables <- new[-26]
 factor.variables <- lapply(factor.variables, as.factor)
 factor.variables <- as.data.frame(factor.variables)
+
+
+
+##Label Encoding of ordinal Variables
+
+
+combined <-
+  combined %>% mutate(ExterQual = ifelse(ExterQual == 'Ex', 5, ifelse(
+    ExterQual == 'Gd', 4, ifelse(ExterQual == 'TA', 3, ifelse(
+      ExterQual == 'Fa', 2, ifelse(ExterQual == 'Po', 1, 0)
+    ))
+  )))
+
+factor.variables$ExterQual = factor(combined$ExterQual,
+                                    levels = c(0, 1, 2, 3, 4, 5),
+                                    ordered = TRUE)
+
+combined <-
+  combined %>% mutate(GarageQual = ifelse(GarageQual == 'Ex', 5, ifelse(
+    GarageQual == 'Gd', 4, ifelse(GarageQual == 'TA', 3, ifelse(
+      GarageQual == 'Fa', 2, ifelse(GarageQual == 'Po', 1, 0)
+    ))
+  )))
+
+combined <-
+  combined %>% mutate(GarageQual = replace(GarageQual, is.na(GarageQual) ==
+                                             TRUE, 0))
+
+
+factor.variables$GarageQual = factor(combined$GarageQual,
+                                     levels = c(0, 1, 2, 3, 4, 5),
+                                     ordered = TRUE)
+
+
+
+combined <-
+  combined %>% mutate(GarageCond = ifelse(GarageCond == 'Ex', 5, ifelse(
+    GarageCond == 'Gd', 4, ifelse(GarageCond == 'TA', 3, ifelse(
+      GarageCond == 'Fa', 2, ifelse(GarageCond == 'Po', 1, 0)
+    ))
+  )))
+
+
+
+combined <-
+  combined %>% mutate(GarageCond = replace(GarageCond, is.na(GarageCond) ==
+                                             TRUE, 0))
+
+factor.variables$GarageCond = factor(combined$GarageCond,
+                                     levels = c(0, 1, 2, 3, 4, 5),
+                                     ordered = TRUE)
+
+combined <-
+  combined %>% mutate(BsmtQual = ifelse(BsmtQual == 'Ex', 5, ifelse(
+    BsmtQual == 'Gd', 4, ifelse(BsmtQual == 'TA', 3, ifelse(
+      BsmtQual == 'Fa', 2, ifelse(BsmtQual == 'Po', 1, 0)
+    ))
+  )))
+
+combined <-
+  combined %>% mutate(BsmtQual = replace(BsmtQual, is.na(BsmtQual) == TRUE, 0))
+
+
+factor.variables$BsmtQual = factor(combined$BsmtQual,
+                                   levels = c(0, 1, 2, 3, 4, 5),
+                                   ordered = TRUE)
+
+combined <-
+  combined %>% mutate(BsmtCond = ifelse(BsmtCond == 'Ex', 5, ifelse(
+    BsmtCond == 'Gd', 4, ifelse(BsmtCond == 'TA', 3, ifelse(
+      BsmtCond == 'Fa', 2, ifelse(BsmtCond == 'Po', 1, 0)
+    ))
+  )))
+
+combined <-
+  combined %>% mutate(BsmtCond = replace(BsmtCond, is.na(BsmtCond) == TRUE, 0))
+
+
+
+factor.variables$BsmtCond = factor(combined$BsmtCond,
+                                   levels = c(0, 1, 2, 3, 4, 5),
+                                   ordered = TRUE)
+
+combined <-
+  combined %>% mutate(ExterCond = ifelse(ExterCond == 'Ex', 5, ifelse(
+    ExterCond == 'Gd', 4, ifelse(ExterCond == 'TA', 3, ifelse(
+      ExterCond == 'Fa', 2, ifelse(ExterCond == 'Po', 1, 0)
+    ))
+  )))
+
+combined <-
+  combined %>% mutate(ExterCond = replace(ExterCond, is.na(ExterCond) == TRUE, 0))
+
+factor.variables$ExterCond = factor(combined$ExterCond,
+                                    levels = c(0, 1, 2, 3, 4, 5),
+                                    ordered = TRUE)
+
+##convert as ordered factor overall condition and overall qual
+
+factor.variables$OverallCond <-
+  factor(combined$OverallCond,
+         levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9),
+         ordered = TRUE)
+
+
+factor.variables$OverallQual <-
+  factor(
+    combined$OverallQual,
+    levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+    ordered = TRUE
+  )
+
+
+##convert into factors
+
+factor.variables$YearBuilt <- as.factor(combined$YearBuilt)
+factor.variables$YearRemodAdd <- as.factor(combined$YearRemodAdd)
+factor.variables$GarageYrBlt <- combined$GarageYrBlt
+
+factor.variables <-
+  factor.variables %>% mutate(GarageYrBlt = ifelse(is.na(GarageYrBlt) == TRUE, as.numeric(YearBuilt), GarageYrBlt))
+factor.variables$GarageYrBlt <-
+  as.factor(factor.variables$GarageYrBlt)
+factor.variables$YrSold <- as.factor(combined$YrSold)
+
+factor.variables$MoSold <- as.factor(combined$MoSold)
+factor.variables$MoSold <-
+  factor(factor.variables$MoSold,
+         levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12))
+
 
 ## Removing additional near zero variance predictors
 
@@ -192,22 +335,25 @@ nearzerocolnames <- nearzerocolnames[-1]
 factor.variables <-
   factor.variables %>% select(-one_of(nearzerocolnames))
 
-# ##remove year column to remove time series
-#
-# factor.variables<-factor.variables%>%select(-contains("year"),-contains("yr"),-contains("Mo"))
-#
-#
+
 ####-- Split train and test records and perform onehotencoding on train data set
 ### OnehotEncoding ----------------------------------------------------------
 
-dmy <- dummyVars(" ~ .", data = factor.variables)
+dmy <-
+  dummyVars(
+    ~ MSSubClass + MSZoning + LotShape + LotConfig + Neighborhood + Condition1 +
+      BldgType + HouseStyle + RoofStyle + Exterior1st + Exterior2nd + MasVnrType +
+      Foundation + BsmtExposure + BsmtFinType1 + CentralAir + Electrical + GarageType +
+      GarageFinish + PavedDrive + SaleType + SaleCondition + YrSold:MoSold,
+    data = factor.variables
+  )
 trsf <- data.frame(predict(dmy, newdata = factor.variables))
 
 ## Continuous Variables ----------------------------------------------------
 ## Check for NA's in continuous variables and impute -----------
 continuous.variables <-
   combined[, lapply(combined, is.numeric) == TRUE]
-continuous.variables <- continuous.variables[,-1]
+continuous.variables <- continuous.variables[, -1]
 
 for (i in 1:ncol(continuous.variables))
 {
@@ -226,23 +372,6 @@ for (i in 1:ncol(continuous.variables))
 
 
 
-#
-# ##convert as ordered factor overall condition and overall qual
-#
-# continuous.variables$OverallCond <-
-#   factor(
-#     continuous.variables$OverallCond,
-#     levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9),
-#     ordered = TRUE
-#   )
-#
-#
-# continuous.variables$OverallQual <-
-#   factor(
-#     continuous.variables$OverallQual,
-#     levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
-#     ordered = TRUE
-#   )
 
 #combine All Porches and remove individual porches
 continuous.variables <-
@@ -361,7 +490,7 @@ if (encode.onehot == 1) {
   combined.clean <- cbind(factor.variables, continuous.variables)
 }
 combined.clean$Id <- combined$Id
-combined.NA <- combined.clean[!complete.cases(combined.clean), ]
+combined.NA <- combined.clean[!complete.cases(combined.clean),]
 summary(combined.clean)
 
 
@@ -400,7 +529,7 @@ baselineLM <- train(
 trcntrl.ridge <- trainControl(method = "cv",
                               number = 10)
 # Set seq of lambda to test
-lambdaGrid <- expand.grid(lambda = 10 ^ seq(10,-2, length = 100))
+lambdaGrid <- expand.grid(lambda = 10 ^ seq(10, -2, length = 100))
 set.seed(1234)
 ridge <- train(
   predictors,
@@ -446,6 +575,11 @@ gbm <- train(
   trControl = trcntrl.ridge,
   tuneGrid = gbmGrid
 )
+
+
+#RandomForest
+
+
 
 gbm.model <- predict(gbm, test.predict)
 gbm.model <- as.data.frame(gbm.model)

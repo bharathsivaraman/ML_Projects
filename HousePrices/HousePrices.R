@@ -37,7 +37,8 @@ packages <-
     "pROC",
     "ROCR",
     "corrplot",
-    "glmnet"
+    "glmnet",
+    "caretEnsemble"
   )
 
 ipak(packages)
@@ -322,6 +323,11 @@ factor.variables$MoSold <-
   factor(factor.variables$MoSold,
          levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12))
 
+##Age of the houses
+factor.variables$Age <-
+  as.numeric(as.character(factor.variables$YrSold)) - as.numeric(as.character(factor.variables$YearBuilt))
+
+
 
 ## Removing additional near zero variance predictors
 
@@ -331,10 +337,11 @@ for (i in (1:length(nearzero))) {
   x <- colnames(factor.variables)[nearzero[[i]]]
   nearzerocolnames <- rbind(nearzerocolnames, x)
 }
+
 nearzerocolnames <- nearzerocolnames[-1]
 factor.variables <-
   factor.variables %>% select(-one_of(nearzerocolnames))
-
+ 
 
 ####-- Split train and test records and perform onehotencoding on train data set
 ### OnehotEncoding ----------------------------------------------------------
@@ -344,7 +351,7 @@ dmy <-
     ~ MSSubClass + MSZoning + LotShape + LotConfig + Neighborhood + Condition1 +
       BldgType + HouseStyle + RoofStyle + Exterior1st + Exterior2nd + MasVnrType +
       Foundation + BsmtExposure + BsmtFinType1 + CentralAir + Electrical + GarageType +
-      GarageFinish + PavedDrive + SaleType + SaleCondition + YrSold:MoSold,
+      GarageFinish + PavedDrive + SaleType + SaleCondition ,
     data = factor.variables
   )
 trsf <- data.frame(predict(dmy, newdata = factor.variables))
@@ -353,7 +360,15 @@ trsf <- data.frame(predict(dmy, newdata = factor.variables))
 ## Check for NA's in continuous variables and impute -----------
 continuous.variables <-
   combined[, lapply(combined, is.numeric) == TRUE]
+
 continuous.variables <- continuous.variables[, -1]
+
+continuous.variables$Age <-
+  as.numeric(as.character(factor.variables$Age))
+common_cols <-
+  intersect(colnames(factor.variables), colnames(continuous.variables))
+continuous.variables <-
+  continuous.variables %>% select(-(one_of(common_cols)))
 
 for (i in 1:ncol(continuous.variables))
 {
@@ -361,19 +376,20 @@ for (i in 1:ncol(continuous.variables))
     impute.median(continuous.variables[[i]])
 }
 
-for (i in 1:ncol(continuous.variables))
-{
-  colname <- colnames(continuous.variables[i])
-  
-  Histplots(colname)
-  
-}
+# for (i in 1:ncol(continuous.variables))
+# {
+#   colname <- colnames(continuous.variables[i])
+#
+#   Histplots(colname)
+#
+# }
 
 
 
 
 
-#combine All Porches and remove individual porches
+
+##Combine all porches
 continuous.variables <-
   continuous.variables %>% mutate(totalporch = ScreenPorch + X3SsnPorch +
                                     EnclosedPorch + OpenPorchSF)
@@ -391,12 +407,23 @@ continuous.variables <-
                                                X2ndFlrSF != 0, 2, 0)
                                     ))
 #
-# #PriceperSqft
-#
-# continuous.variables<-continuous.variables%>%mutate(pricesqft=SalePrice/LotArea)
-#
+# ##combine All  Areas
+continuous.variables$TotalArea <-
+  continuous.variables$LotFrontage + continuous.variables$LotArea + continuous.variables$MasVnrArea + continuous.variables$BsmtFinSF1 +
+  continuous.variables$BsmtFinSF2 + continuous.variables$BsmtUnfSF + continuous.variables$TotalBsmtSF + continuous.variables$X1stFlrSF +
+  continuous.variables$X2ndFlrSF + continuous.variables$GrLivArea + continuous.variables$GarageArea + continuous.variables$WoodDeckSF +
+  continuous.variables$OpenPorchSF + continuous.variables$EnclosedPorch + continuous.variables$X3SsnPorch +
+  continuous.variables$ScreenPorch + continuous.variables$LowQualFinSF + continuous.variables$PoolArea
 
+##Area of both floors
+continuous.variables$TotalArea1st2nd <-
+  continuous.variables$X1stFlrSF + continuous.variables$X2ndFlrSF
 
+##TotalNumberofbaths
+
+continuous.variables$Totalbath <-
+  continuous.variables$BsmtFullBath + continuous.variables$BsmtHalfBath *
+  0.5 + continuous.variables$FullBath + continuous.variables$HalfBath * 0.5
 
 #Remove Non Zero Var
 nearzero <- nearZeroVar(continuous.variables)
@@ -413,12 +440,12 @@ continuous.variables <-
 M <- cor(continuous.variables)
 corrplot(M, method = "circle")
 
-findCorrelation(M, cutoff = 0.75, verbose = TRUE)
-
+collinear<-findCorrelation(M, cutoff = 0.75 )
+collinear.names<-names(continuous.variables)[collinear]
 
 #There is not much colinearity betweeb variables. Removing TotalRmsabvgrnd and Numberof Garage cars
 
-
+continuous.variables<-continuous.variables%>%select(-one_of(collinear.names))
 summary(continuous.variables)
 
 
@@ -472,6 +499,17 @@ continuous.variables$TotalBsmtSF <-
   log(continuous.variables$TotalBsmtSF + 1)
 Histplots("TotalBsmtSF")
 
+continuous.variables$TotalArea <-
+  log(continuous.variables$TotalArea + 1)
+
+continuous.variables$totalporch <-
+  log(continuous.variables$totalporch + 1)
+
+continuous.variables$MasVnrArea <-
+  log(continuous.variables$MasVnrArea + 1)
+#
+# continuous.variables$SalePrice <-
+#   log(continuous.variables$SalePrice + 1)
 
 #
 # for (i in 1:ncol(continuous.variables)){
@@ -492,6 +530,20 @@ if (encode.onehot == 1) {
 combined.clean$Id <- combined$Id
 combined.NA <- combined.clean[!complete.cases(combined.clean),]
 summary(combined.clean)
+
+
+
+## Removing additional near zero variance predictors
+
+nearzero <- nearZeroVar(combined.clean)
+nearzerocolnames <- NA
+for (i in (1:length(nearzero))) {
+  x <- colnames(factor.variables)[nearzero[[i]]]
+  nearzerocolnames <- rbind(nearzerocolnames, x)
+}
+nearzerocolnames <- nearzerocolnames[-1]
+combined.clean <-
+  combined.clean %>% select(-one_of(nearzerocolnames))
 
 
 train.predict <- combined.clean %>% filter(Id %in% train[["Id"]])
@@ -560,6 +612,21 @@ lasso <- train(
 #GBM
 predictors <- SalePrice ~ .
 
+#OverallQual +
+#   GrLivArea      + TotalBsmtSF   +
+#   LotArea       +
+#   GarageCars      +
+#   GarageArea   +
+#   LotFrontage +
+#   BsmtQual          +
+#   YearRemodAdd      +
+#   TotRmsAbvGrd      +
+#   MasVnrArea        +
+#   totalporch        +
+#   YearBuilt         +
+#   FullBath          + OverallCond + GarageYrBlt + Fireplaces + TotalArea
+
+
 
 gbmGrid <-  expand.grid(
   interaction.depth = c(1, 5, 9),
@@ -579,10 +646,114 @@ gbm <- train(
 
 #RandomForest
 
+predictors <- SalePrice ~ .
 
 
-gbm.model <- predict(gbm, test.predict)
-gbm.model <- as.data.frame(gbm.model)
-gbm.model <-
-  data.frame(id = test$Id, SalePrice = gbm.model$gbm.model)
-write.csv(gbm.model, "gbm.model.csv", row.names = FALSE)
+sqtmtry <- round(sqrt(ncol(train.predict) - 1))
+rfGrid <-
+  expand.grid(mtry = c(round(sqtmtry / 2), sqtmtry, 2 * sqtmtry))
+
+trcntrl.rf <-
+  trainControl(method = "repeatedcv",
+               number = 5,
+               repeats = 5)
+
+
+set.seed(1234)
+randomforest <- train(
+  predictors,
+  data = train.predict,
+  method = "rf",
+  ntree = 500,
+  tuneGrid = rfGrid ,
+  trControl = trcntrl.rf,
+  importance = TRUE
+)
+
+
+##XGBtree
+
+set.seed(3567)
+cv.ctrl <-
+  trainControl(method = "repeatedcv",
+               repeats = 1,
+               number = 3)
+
+train.predict.xgb <- train.predict %>% select(-one_of("SalePrice"))
+trainx <- Matrix(data.matrix(train.predict.xgb), sparse = TRUE)
+trainy <- as.numeric(train.predict$SalePrice)
+#inputValid <- Matrix(data.matrix(validationdata[,c(1:numCol),with=FALSE]), sparse=TRUE)
+
+xgbGrid <- expand.grid(
+  nrounds = c(10000),
+  max_depth = seq(3, 6, by = 1),
+  eta = seq(0.03, 0.05, by = 0.01),
+  gamma = seq(0, 1, by = 1),
+  colsample_bytree = seq(0.4, 0.6, by = 0.1),
+  min_child_weight = seq(1, 1, by = 0.5),
+  subsample = seq(0.4, 0.6, by = 0.1)
+)
+
+xgb_tune <- train(
+  predictors,
+  data = train.predict,
+  method = "xgbTree",
+  trControl = cv.ctrl,
+  tuneGrid = xgbGrid,
+  verbose = T,
+  
+  nthread = 3
+)
+
+
+#-- Ensemble model--------
+
+control <-
+  trainControl(
+    method = "repeatedcv",
+    number = 10,
+    repeats = 3,
+    savePredictions = TRUE
+  )
+algorithmList <- c('lda', 'gbm')
+set.seed(7)
+models <-
+  caretList(
+    predictors ~ .,
+    data = train.predict,
+    trControl = control,
+    methodList = algorithmList
+  )
+results <- resamples(models)
+summary(results)
+dotplot(results)
+
+
+
+
+##----  CSV output
+
+rf.model <- predict(randomforest, test.predict)
+rf.model <- as.data.frame(rf.model)
+rf.model <-
+  data.frame(id = test$Id, SalePrice = rf.model$rf.model)
+write.csv(rf.model, "rf.model.csv", row.names = FALSE)
+
+gbm.model1 <- predict(gbm, test.predict)
+gbm.model1 <- as.data.frame(gbm.model1)
+gbm.model1 <-
+  data.frame(id = test$Id, SalePrice = gbm.model1$gbm.model1)
+write.csv(gbm.model1, "gbm.model1.csv", row.names = FALSE)
+
+
+
+xgb.model <- predict(xgb_tune, test.predict)
+xgb.model <- as.data.frame(xgb.model)
+xgb.model <-
+  data.frame(id = test$Id, SalePrice = xgb.model$xgb.model)
+write.csv(xgb.model, "xgb.model.csv", row.names = FALSE)
+
+
+saveRDS(gbm.model,"gbm.model")
+saveRDS(gbm.model1,"gbm.model1")
+s

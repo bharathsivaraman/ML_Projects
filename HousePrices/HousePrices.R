@@ -6,7 +6,7 @@
 
 
 
-##setwd("C:\\Users\\sivarbh\\Documents\\ML_Projects\\Houseprices")
+##setwd("C:\\Users\\KV352JE\\Documents\\ML_Projects\\Houseprices")
 
 ##test <- read.csv("test.csv")
 ##train <- read.csv("train.csv")
@@ -38,7 +38,8 @@ packages <-
     "ROCR",
     "corrplot",
     "glmnet",
-    "caretEnsemble"
+    "caretEnsemble",
+    "lubridate","outliers"
   )
 
 ipak(packages)
@@ -81,7 +82,7 @@ threshold <- nrow(combined) * .4
 colnames <- "id"
 
 for (i in 1:ncol(combined)) {
-  x <- combined[!complete.cases(combined[i]),][i]
+  x <- combined[!complete.cases(combined[i]), ][i]
   
   if (nrow(x) > threshold) {
     colnames <- rbind(colnames, colnames(x))
@@ -162,7 +163,7 @@ for (i in 1:(ncol(factor.variables) - 1))
 
 rm(data.levels.tmp)
 rm(x)
-data.levels <- data.levels[-1,]
+data.levels <- data.levels[-1, ]
 data.levels$Dist <-
   (data.levels$Freq / nrow(factor.variables)) * 100
 
@@ -328,20 +329,15 @@ factor.variables$Age <-
   as.numeric(as.character(factor.variables$YrSold)) - as.numeric(as.character(factor.variables$YearBuilt))
 
 
-
 ## Removing additional near zero variance predictors
 
 nearzero <- nearZeroVar(factor.variables)
-nearzerocolnames <- NA
-for (i in (1:length(nearzero))) {
-  x <- colnames(factor.variables)[nearzero[[i]]]
-  nearzerocolnames <- rbind(nearzerocolnames, x)
-}
+nearzero.colnames <- names(factor.variables)[nearzero]
 
-nearzerocolnames <- nearzerocolnames[-1]
+
 factor.variables <-
-  factor.variables %>% select(-one_of(nearzerocolnames))
- 
+  factor.variables %>% select(-one_of(nearzero.colnames))
+
 
 ####-- Split train and test records and perform onehotencoding on train data set
 ### OnehotEncoding ----------------------------------------------------------
@@ -361,7 +357,7 @@ trsf <- data.frame(predict(dmy, newdata = factor.variables))
 continuous.variables <-
   combined[, lapply(combined, is.numeric) == TRUE]
 
-continuous.variables <- continuous.variables[, -1]
+continuous.variables <- continuous.variables[,-1]
 
 continuous.variables$Age <-
   as.numeric(as.character(factor.variables$Age))
@@ -427,25 +423,29 @@ continuous.variables$Totalbath <-
 
 #Remove Non Zero Var
 nearzero <- nearZeroVar(continuous.variables)
-nearzerocolnames <- NA
-for (i in (1:length(nearzero))) {
-  x <- colnames(continuous.variables)[nearzero[[i]]]
-  nearzerocolnames <- rbind(nearzerocolnames, x)
-}
-nearzerocolnames <- nearzerocolnames[-1]
+nearzero.colnames <- names(continuous.variables)[nearzero]
 continuous.variables <-
-  continuous.variables %>% select(-one_of(nearzerocolnames))
+  continuous.variables %>% select(-one_of(nearzero.colnames))
 
 #Find collinearity
 M <- cor(continuous.variables)
 corrplot(M, method = "circle")
 
-collinear<-findCorrelation(M, cutoff = 0.75 )
-collinear.names<-names(continuous.variables)[collinear]
+collinear <- findCorrelation(M, cutoff = 0.75)
 
-#There is not much colinearity betweeb variables. Removing TotalRmsabvgrnd and Numberof Garage cars
+collinear.names <- names(continuous.variables)[collinear]
 
-continuous.variables<-continuous.variables%>%select(-one_of(collinear.names))
+
+
+
+continuous.variables <-
+  continuous.variables %>% select(-one_of(
+    "TotalArea1st2nd",
+    "X1stFlrSF",
+    "X2ndFlrSF",
+    "GrLivArea",
+    "GarageCars"
+  ))
 summary(continuous.variables)
 
 
@@ -470,6 +470,15 @@ continuous.variables <-
       "WoodDeckSF"
     )
   )
+
+
+
+# Outlier Detection -------------------------------------------------------
+
+
+train.outliers<-continuous.variables[1:nrow(train),]
+ 
+chisq.out.test(train.outliers$LotFrontage,variance=train.outliers$LotFrontage,opposite = FALSE)
 
 #Apply log to the following variables
 #LotArea,#LotFrontage,#SalePrice,#GarageArea,GrLivArea,BsmtUnfSF,TotalBsmtSF,WoodDeckSF
@@ -516,6 +525,10 @@ continuous.variables$MasVnrArea <-
 # x<-BoxCoxTrans(continuous.variables[[i]])
 # continuous.variables[[i]]<-predict(x,continuous.variables[[i]])
 # }
+
+
+
+
 ##Combine continuous and factor variables
 
 ##with one hot encoding
@@ -526,9 +539,10 @@ if (encode.onehot == 1) {
   combined.clean <- cbind(trsf, continuous.variables)
 } else {
   combined.clean <- cbind(factor.variables, continuous.variables)
+  
 }
 combined.clean$Id <- combined$Id
-combined.NA <- combined.clean[!complete.cases(combined.clean),]
+combined.NA <- combined.clean[!complete.cases(combined.clean), ]
 summary(combined.clean)
 
 
@@ -536,19 +550,28 @@ summary(combined.clean)
 ## Removing additional near zero variance predictors
 
 nearzero <- nearZeroVar(combined.clean)
-nearzerocolnames <- NA
-for (i in (1:length(nearzero))) {
-  x <- colnames(factor.variables)[nearzero[[i]]]
-  nearzerocolnames <- rbind(nearzerocolnames, x)
-}
-nearzerocolnames <- nearzerocolnames[-1]
+nearzero.colnames <- names(combined.clean)[nearzero]
 combined.clean <-
-  combined.clean %>% select(-one_of(nearzerocolnames))
+  combined.clean %>% select(-one_of(nearzero.colnames))
+
+
+
 
 
 train.predict <- combined.clean %>% filter(Id %in% train[["Id"]])
 test.predict <- combined.clean %>% filter(Id %in% test[["Id"]])
 
+
+
+
+
+set.seed(7)
+control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+# run the RFE algorithm
+results <- rfe(train.predict[,!names(train.predict) %in% "SalePrice"], train.predict[,names(train.predict) %in% "SalePrice"], sizes=c(1:8), rfeControl=control)
+
+
+# summarize the results
 
 
 
@@ -579,9 +602,9 @@ baselineLM <- train(
 #Ridge
 
 trcntrl.ridge <- trainControl(method = "cv",
-                              number = 10)
+                              number = 10, savePredictions = TRUE)
 # Set seq of lambda to test
-lambdaGrid <- expand.grid(lambda = 10 ^ seq(10, -2, length = 100))
+lambdaGrid <- expand.grid(lambda = 10 ^ seq(10,-2, length = 100))
 set.seed(1234)
 ridge <- train(
   predictors,
@@ -610,73 +633,34 @@ lasso <- train(
 )
 
 #GBM
-predictors <- SalePrice ~ .
-
-#OverallQual +
-#   GrLivArea      + TotalBsmtSF   +
-#   LotArea       +
-#   GarageCars      +
-#   GarageArea   +
-#   LotFrontage +
-#   BsmtQual          +
-#   YearRemodAdd      +
-#   TotRmsAbvGrd      +
-#   MasVnrArea        +
-#   totalporch        +
-#   YearBuilt         +
-#   FullBath          + OverallCond + GarageYrBlt + Fireplaces + TotalArea
+predictors <- SalePrice ~  TotalArea+GarageArea + TotalBsmtSF + Totalbath +Foundation.PConc+ Fireplaces+FullBath+ CentralAir.N+Foundation.Other+CentralAir.Y+GarageType.Attchd+TotRmsAbvGrd+HalfBath+BedroomAbvGr + MasVnrArea+ HouseStyle.2Story + GarageType.Detchd + nmbroffloors + totalporch
+ 
 
 
-
+set.seed(1232)
 gbmGrid <-  expand.grid(
   interaction.depth = c(1, 5, 9),
   n.trees = (1:30) * 50,
   shrinkage = 0.1,
   n.minobsinnode = 20
 )
-set.seed(1234)
+set.seed(2345)
 gbm <- train(
   predictors,
   data = train.predict,
   method = 'gbm',
   trControl = trcntrl.ridge,
-  tuneGrid = gbmGrid
+  tuneGrid = gbmGrid ,preProcess=c("center","scale")
 )
 
-
-#RandomForest
-
-predictors <- SalePrice ~ .
-
-
-sqtmtry <- round(sqrt(ncol(train.predict) - 1))
-rfGrid <-
-  expand.grid(mtry = c(round(sqtmtry / 2), sqtmtry, 2 * sqtmtry))
-
-trcntrl.rf <-
-  trainControl(method = "repeatedcv",
-               number = 5,
-               repeats = 5)
-
-
-set.seed(1234)
-randomforest <- train(
-  predictors,
-  data = train.predict,
-  method = "rf",
-  ntree = 500,
-  tuneGrid = rfGrid ,
-  trControl = trcntrl.rf,
-  importance = TRUE
-)
-
+ 
 
 ##XGBtree
 
 set.seed(3567)
 cv.ctrl <-
-  trainControl(method = "repeatedcv",
-               repeats = 1,
+  trainControl(method = "cv",
+               repeats = 10,
                number = 3)
 
 train.predict.xgb <- train.predict %>% select(-one_of("SalePrice"))
@@ -706,7 +690,32 @@ xgb_tune <- train(
 )
 
 
-#-- Ensemble model--------
+
+ 
+
+# Model Evaluation --------------------------------------------------------
+
+
+
+
+plot.rsquare <-
+  gbm$pred %>% filter(
+    n.trees == 100,
+    interaction.depth == 9,
+    shrinkage == 0.1,
+    n.minobsinnode == 20
+  ) %>% select(pred, obs)
+
+plot.rsquare<-plot.rsquare%>%mutate(Rsquare=caret::R2(pred,obs))
+
+### plotting observed vs predicted
+
+ggplot(plot.rsquare)+aes(obs,pred)+geom_point()+geom_smooth(method='lm',formula=y~x)
+
+
+RMSE(log(plot.rsquare$pred),log(plot.rsquare$obs))
+
+# Ensemble model-----------------------------------------------------------
 
 control <-
   trainControl(
@@ -743,6 +752,9 @@ gbm.model1 <- predict(gbm, test.predict)
 gbm.model1 <- as.data.frame(gbm.model1)
 gbm.model1 <-
   data.frame(id = test$Id, SalePrice = gbm.model1$gbm.model1)
+
+
+
 write.csv(gbm.model1, "gbm.model1.csv", row.names = FALSE)
 
 
@@ -754,6 +766,5 @@ xgb.model <-
 write.csv(xgb.model, "xgb.model.csv", row.names = FALSE)
 
 
-saveRDS(gbm.model,"gbm.model")
-saveRDS(gbm.model1,"gbm.model1")
-s
+saveRDS(gbm.model, "gbm.model")
+saveRDS(gbm.model1, "gbm.model1")

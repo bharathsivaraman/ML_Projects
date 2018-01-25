@@ -375,20 +375,7 @@ for (i in 1:ncol(continuous.variables))
   continuous.variables[[i]] <-
     impute.median(continuous.variables[[i]])
 }
-
-# for (i in 1:ncol(continuous.variables))
-# {
-#   colname <- colnames(continuous.variables[i])
-#
-#   Histplots(colname)
-#
-# }
-
-
-
-
-
-
+ 
 ##Combine all porches
 continuous.variables <-
   continuous.variables %>% mutate(totalporch = ScreenPorch + X3SsnPorch +
@@ -536,14 +523,10 @@ summary(combined.clean)
 ## Removing additional near zero variance predictors
 
 nearzero <- nearZeroVar(combined.clean)
-nearzerocolnames <- NA
-for (i in (1:length(nearzero))) {
-  x <- colnames(factor.variables)[nearzero[[i]]]
-  nearzerocolnames <- rbind(nearzerocolnames, x)
-}
-nearzerocolnames <- nearzerocolnames[-1]
-combined.clean <-
-  combined.clean %>% select(-one_of(nearzerocolnames))
+nearzero.colnames<-names(combined.clean)[nearzero]
+combined.clean<-combined.clean%>%select(-one_of(nearzero.colnames))
+
+ 
 
 
 train.predict <- combined.clean %>% filter(Id %in% train[["Id"]])
@@ -675,9 +658,9 @@ randomforest <- train(
 
 set.seed(3567)
 cv.ctrl <-
-  trainControl(method = "repeatedcv",
-               repeats = 1,
-               number = 3)
+  trainControl(method = "cv",
+               repeats = 10,
+               number = 3,savePredictions = TRUE)
 
 train.predict.xgb <- train.predict %>% select(-one_of("SalePrice"))
 trainx <- Matrix(data.matrix(train.predict.xgb), sparse = TRUE)

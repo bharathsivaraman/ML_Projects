@@ -185,7 +185,7 @@ combine_df["build_year"]=np.where(combine_df["build_year"]==1, np.nan,combine_df
  del tmp
 ## Full_sq has houses with 0. Convert them to NA
  
- 
+tmp= combine_df[combine_df["full_sq"]==0] 
  
  
  
@@ -201,13 +201,13 @@ bins=[0,1,10,20,30,40,50,60,70,80,90,100,200,300,400,500,1000,1500,2000,3000,400
 combine_df.groupby(pd.cut(combine_df["life_sq"],bins,right=False))["life_sq"].count()
 
 combine_df.groupby(pd.cut(combine_df["life_sq"],bins,right=False))["price_doc"].median()
-#almost all the values are between 0 and 100. Median prices of some range is not propotional to the size
+#almost all thes values are between 0 and 100. Median prices of some range is not propotional to the size
 
 #Analyzing missing values
 
 train_imp_df[train_imp_df["life_sq"].isna()]["price_doc"].mean()
 
-#Analyzing the outliers
+#Analyzing the outliersss
 
 tmp=train_df[train_df["life_sq"]>100]
 
@@ -231,8 +231,7 @@ ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
  unique_values_df = numeric_df.apply(lambda x: x.nunique()).reset_index()
  unique_values_df.columns = ["column_name", "count"]
 
- ## Checking
- for categories within the numeric fields
+ ## Checking for categories within the numeric fields
  unique_values_df[unique_values_df["count"] == 2]
 
  ## None of the numerical columns have categories in them

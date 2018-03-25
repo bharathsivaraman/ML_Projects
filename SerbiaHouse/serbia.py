@@ -107,6 +107,32 @@ test_imp_df=test_imp_df.assign(price_doc=0)
  
 combine_df=train_imp_df.append(test_imp_df).reset_index()
 
+numeric_df = combine_df.select_dtypes(include = [np.number])
+
+numeric_df=numeric_df.drop(numeric_df[["price_doc","index"]],axis=1)
+
+def get_redundant_pairs(df):
+    '''Get diagonal and lower triangular pairs of correlation matrix'''
+    pairs_to_drop = set()
+    cols = df.columns
+    for i in range(0, df.shape[1]):
+        for j in range(0, i+1):
+            pairs_to_drop.add((cols[i], cols[j]))
+    return pairs_to_drop
+
+get_redundant_pairs(combine_df)
+
+
+def get_top_abs_correlations(df, n=5):
+    au_corr = df.corr().abs().unstack()
+    labels_to_drop = get_redundant_pairs(df)
+    au_corr = au_corr.drop(labels=labels_to_drop).sort_values(ascending=False)
+    return au_corr[0:n]
+
+print("Top Absolute Correlations")
+x= get_top_abs_correlations(numeric_df, 40)
+
+plt.matshow(numeric_df.corr())
  ## Missing values
 
 combine_df_missing = combine_df.isnull().sum().reset_index()
@@ -286,7 +312,6 @@ categorical_train_df = train_imp_df.select_dtypes(include = [np.object])
 categorical_train_df.apply(lambda x: x.nunique())
 
 ## sub area has 146 categories.Cannot be used in any tree based alogorithms.Too less variance(maybe drop ? )
-numeric_df = train_imp_df.select_dtypes(include = [np.number])
 
 # Unique values of objects.Checking to if any categorical variables have been encoded as numeric
 unique_values_df = numeric_df.apply(lambda x: x.nunique()).reset_index()

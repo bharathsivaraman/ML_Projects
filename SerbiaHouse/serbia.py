@@ -6,13 +6,21 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pandas import DataFrame, Series
 import matplotlib.ticker as ticker
-
 from sklearn import model_selection, preprocessing
-from sklearn.feature_selection import VarianceThreshold
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import Imputer
+from sklearn.cross_validation import KFold
 import xgboost as xgb
 from xgboost import XGBClassifier
- 
- ## Read all the files and initial data analysis
+import copy
+from sklearn.ensemble import RandomForestRegressor as RGR
+from sklearn.ensemble import DecisionTreeRegressor  as dt
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV
+
+
+## Read all the files and initial data analysis
 
 train_df = pd.read_csv("train.csv", parse_dates = ["timestamp"])
 test_df = pd.read_csv("test.csv", parse_dates = ["timestamp"])
@@ -45,9 +53,14 @@ train_dtypes.groupby("type").count()
 
  ## There are too many features.Run a random forest of XG boost to find out important features
 
+
+
+
+########## Baseline model on Imp features #####################
+
  ### XGB model to get important features
  
-train_mod_df=train_df
+train_mod_df=copy.deepcopy(train_df)
 
 for f in train_mod_df.columns:
    if train_mod_df[f].dtype == 'object':
@@ -76,7 +89,11 @@ xgb.plot_importance(model, max_num_features = 50, height = 0.8, ax = ax)
 plt.show()
 
 del train_mod_df
- ## Selecting the top 50 Paramaters
+
+#################### End of Baseline Model ################################
+
+## Selecting the top 50 Paramaters
+
 importance = model.get_fscore()
 importance_df = pd.DataFrame(pd.Series(importance)).reset_index()
 importance_df.columns = ["Column_Name", "Score"]
@@ -107,6 +124,11 @@ test_imp_df=test_imp_df.assign(price_doc=0)
  
 combine_df=train_imp_df.append(test_imp_df).reset_index()
 
+
+
+########### Collinearity Analysis ###########
+
+
 numeric_df = combine_df.select_dtypes(include = [np.number])
 
 numeric_df=numeric_df.drop(numeric_df[["price_doc","index"]],axis=1)
@@ -129,11 +151,21 @@ def get_top_abs_correlations(df, n=5):
     au_corr = au_corr.drop(labels=labels_to_drop).sort_values(ascending=False)
     return au_corr[0:n]
 
-print("Top Absolute Correlations")
-x= get_top_abs_correlations(numeric_df, 40)
 
-plt.matshow(numeric_df.corr())
- ## Missing values
+corr_df= get_top_abs_correlations(numeric_df, 40).reset_index()
+
+corr_df.columns=["Column1","Column2","Corr"]
+
+col_drop=combine_df.columns[combine_df.columns.isin(corr_df["Column2"].unique())]
+
+#### Dropping columns from furtther analysis
+
+combine_df=combine_df.drop(labels=col_drop,axis=1).reset_index()
+
+################ End of Collinearity Analysis ##############
+
+
+ ########## Missing values analysis ######
 
 combine_df_missing = combine_df.isnull().sum().reset_index()
 combine_df_missing.columns = ["Column_Name", "Count"]
@@ -143,6 +175,13 @@ combine_df_missing["Percentage"] = combine_df_missing.Count / 30471
 
 combine_df_missing[combine_df_missing.Count != 0]## 11 columns have missing values in them 
 combine_df_missing.Column_Name[combine_df_missing.Percentage > 0.4].reset_index()
+
+
+############ End of Missing Values ############
+
+
+######### EDA of varaibles that are missing ##########
+##### Check the demograhic data to see for data error, and missing values
 
  ## Keep build year and state.Might be important variables
 combine_df.groupby("state")["state"].count()
@@ -155,9 +194,6 @@ combine_df.groupby("state")["price_doc"].median()
 
  # filling missing values for state by imputing 0
 combine_df["state"] = combine_df["state"].fillna(0)## Result of imputing seems accurate.All the houses that have missing values seem to have the lowest median price
-
-
-del tmp
 
 tmp=DataFrame(np.where(combine_df["build_year"]
  .isnull(), "missing", combine_df["build_year"])).reset_index()
@@ -190,7 +226,7 @@ combine_df["build_year"]=np.where(combine_df["build_year"]==1, np.nan,combine_df
 
  # drop Hospital beds rion hospital_beds_raion
 
-combine_df = combine_df.drop(["hospital_beds_raion"], axis = 1)
+combine_df = combine_df.drop([ "cafe_sum_500_min_price_avg"], axis = 1)
  
  ## Full_Sq and life_sq
  ## there are houses with life_sq more than full_sq. That is a data error
@@ -205,7 +241,6 @@ ax=sns.lmplot(x="life_sq",y="price_doc",data=tmp)
  
 combine_df["full_sq"]=np.where(combine_df["life_sq"]>combine_df["full_sq"],combine_df["life_sq"],combine_df["full_sq"])
 
-del tmp
 ## Full_sq has houses with 0. Convert them to NA
  
 tmp= combine_df[combine_df["full_sq"]==0] 
@@ -264,7 +299,6 @@ sns.distplot(np.log1p(combine_df["life_sq"].dropna()), kde = False)
  
 ## Needs to be transformed ?
  
- 
 #Floor 
 combine_df.floor.unique()  
 sns.distplot(combine_df.floor.dropna(),kde=False)
@@ -305,7 +339,156 @@ sns.lmplot(x="max_floor",y="price_doc",data=train_imp_df)
 train_imp_df.groupby("max_floor")["price_doc"].median()
 train_imp_df[train_imp_df["max_floor"].isna()]["price_doc"].mean()
 
+
 ##All the missing values probably fit between 0 and 1 floor based on the median price
+
+##Material
+
+combine_df.material.unique()
+combine_df.groupby("material")["material"].count()
+sns.boxplot(x="material",y="price_doc",data=train_imp_df)
+
+##Kitch_Sq
+#Kitch sq =0 is probably non commmericial space
+#Check if any of the apartments have kitchen space greater than fullsq
+
+combine_df[(combine_df["kitch_sq"]>combine_df["full_sq"])]
+#17 rows have this. Its a data error.make them null
+combine_df["kitch_sq"]=np.where(combine_df["kitch_sq"]>combine_df["full_sq"],np.nan,combine_df["kitch_sq"])
+
+sns.lmplot(x="kitch_sq",y="price_doc",data=combine_df[combine_df.kitch_sq.values<25] )
+
+##Kitchen does not seem to have too many outliers
+
+##Subarea - Drop aubarea as it dosent provide much information
+
+combine_df=combine_df.drop(labels="sub_area",axis=1)
+
+
+############## End of EDA for demographc varlables with missing values############
+
+
+
+####### EDA of Neighbourhood varaibles  ##############
+
+filter_col= [col for col in combine_df if col.endswith('km')]
+filter_col.append('price_doc')
+
+nd = pd.melt(combine_df, value_vars = filter_col)
+n1 = sns.FacetGrid (nd, col='variable', col_wrap=3, sharex=False, sharey = False)
+n1 = n1.map(sns.distplot, 'value')
+ 
+###Plotting neihhbourhood vs price_doc
+perm=pd.DataFrame()
+for f in filter_col:
+    tmp=pd.DataFrame()
+    tmp=pd.melt(train_imp_df,value_vars=f)
+    tmp['price_doc']=train_imp_df['price_doc']
+    perm=perm.append(tmp)
+
+n1 = sns.FacetGrid (perm, col='variable',  col_wrap=3, sharex=False, sharey = False)
+n1 = n1.map(plt.scatter, "value", "price_doc")
+
+
+corr = train_imp_df[filter_col].corr()
+
+print (corr['price_doc'].sort_values(ascending=False) , '\n') #top 15 values
+print ('----------------------')
+
+##Observation:
+## As 
+
+
+
+###### End of Neibourhood Analaysis#####
+
+######### Data Preprocessing  ############
+
+
+combine_df=combine_df.drop(["level_0","index"],axis=1)
+
+
+##Split into test and train for the model
+
+train_model_df=combine_df.iloc[train_df["id"]]
+
+imputer = Imputer()
+values=train_model_df.values
+
+transformed_values = imputer.fit_transform(values)
+
+transformed_values=pd.DataFrame(transformed_values)
+
+y= transformed_values.iloc[:,-1].values
+
+X_features=train_model_df.columns[0:34]
+
+X_train, X_validation, y_train, y_validation = train_test_split(transformed_values.iloc[:,0:34], y, test_size=0.2)
+
+
+test_model_df= combine_df[combine_df.price_doc.values==0]
+
+ 
+
+values=test_model_df.values
+
+transformed_values = imputer.fit_transform(values)
+
+transformed_values=pd.DataFrame(transformed_values)
+
+X_test=transformed_values.iloc[:,0:34]
+
+######### End of Data Preprocessing ########
+
+########## Model building #################
+
+##RandomForest
+model.rgr=RGR()
+param_grid = { 
+           "n_estimators" : [9, 18, 27, 36, 45, 54, 63],
+           "max_depth" : [1, 5, 10, 15, 20, 25, 30],
+           "min_samples_leaf" : [1, 2, 4, 6, 8, 10]}
+ 
+
+grid_search=GridSearchCV(model.rgr,param_grid,cv=5,scoring='neg_mean_squared_error')
+
+grid_search.fit(X_train,y_train)
+
+grid_search.best_params_
+
+grid_search.best_estimator_
+
+cvres=grid_search.cv_results_
+
+for mean_score, params in zip(cvres['mean_test_score'],cvres['params']):
+    print (np.sqrt(-mean_score),params)
+
+predictions=grid_search.predict(X_train)
+ 
+rgr_mse=mean_squared_error(y_train,predictions)
+rgr_mse=np.sqrt(rgr_mse)
+
+
+
+
+############# Validation Sets ################
+
+
+
+
+
+
+
+########### Submissions ##################
+
+y_pred=grid_search.predict(X_test)    
+
+df_sub = pd.DataFrame({'id': test_df['id'], 'price_doc': y_pred})
+
+df_sub.to_csv('sub.csv', index=False)
+
+
+########### End of Model Function ##############
 
 ## Catergorical variables
 categorical_train_df = train_imp_df.select_dtypes(include = [np.object])

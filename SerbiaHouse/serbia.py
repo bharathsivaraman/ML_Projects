@@ -4,20 +4,17 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pandas import DataFrame, Series
 import matplotlib.ticker as ticker
-from sklearn import model_selection, preprocessing
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import Imputer
-from sklearn.cross_validation import KFold
 import xgboost as xgb
-from xgboost import XGBClassifier
 import copy
 from sklearn.ensemble import RandomForestRegressor as RGR
-from sklearn.ensemble import DecisionTreeRegressor  as dt
+from sklearn.tree  import DecisionTreeRegressor  as dt
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import GridSearchCV
+from sklearn import preprocessing 
 
 
 ## Read all the files and initial data analysis
@@ -88,7 +85,7 @@ fig, ax = plt.subplots(figsize = (12, 18))
 xgb.plot_importance(model, max_num_features = 50, height = 0.8, ax = ax)
 plt.show()
 
-del train_mod_df
+del f,xgb_params,train_X,train_y,train_mod_df
 
 #################### End of Baseline Model ################################
 
@@ -100,6 +97,7 @@ importance_df.columns = ["Column_Name", "Score"]
 
 importance_df = importance_df.sort_values("Score", ascending = False)
 
+del importance
  ### Analyzing important features
 
 def describe(df, stats):
@@ -112,6 +110,7 @@ summary_stats_df = summary_stats_df.rename(columns = {
  })
 summary_stats_df = summary_stats_df[summary_stats_df.column_name.isin(importance_df.Column_Name.values[: 50])]
 
+del summary_stats_df
  ## Get Data Frame with important features only
 
 train_imp_df = train_df.iloc[: , train_df.columns.isin(importance_df.Column_Name.values[: 50])]
@@ -124,6 +123,7 @@ test_imp_df=test_imp_df.assign(price_doc=0)
  
 combine_df=train_imp_df.append(test_imp_df).reset_index()
 
+del train_imp_df, test_imp_df
 
 
 ########### Collinearity Analysis ###########
@@ -177,13 +177,16 @@ combine_df_missing[combine_df_missing.Count != 0]## 11 columns have missing valu
 combine_df_missing.Column_Name[combine_df_missing.Percentage > 0.4].reset_index()
 
 
+del corr_df, numeric_df
 ############ End of Missing Values ############
 
 
 ######### EDA of varaibles that are missing ##########
 ##### Check the demograhic data to see for data error, and missing values
 
- ## Keep build year and state.Might be important variables
+##### State ######
+
+  ## Keep build year and state.Might be important variables
 combine_df.groupby("state")["state"].count()
 
  ## State = 33 is an error convert into 3. Make missing state as 0. State defines the condition of the houses
@@ -195,7 +198,11 @@ combine_df.groupby("state")["price_doc"].median()
  # filling missing values for state by imputing 0
 combine_df["state"] = combine_df["state"].fillna(0)## Result of imputing seems accurate.All the houses that have missing values seem to have the lowest median price
 
-tmp=DataFrame(np.where(combine_df["build_year"]
+###### End of State ########
+
+#### Build Year ##### 
+
+tmp=pd.DataFrame(np.where(combine_df["build_year"]
  .isnull(), "missing", combine_df["build_year"])).reset_index()
 
 tmp.columns=["index","build_year"]
@@ -224,6 +231,17 @@ combine_df["build_year"]=np.where(combine_df["build_year"]==20, 2014,combine_df[
 combine_df["build_year"]=np.where(combine_df["build_year"]==0, np.nan,combine_df["build_year"])
 combine_df["build_year"]=np.where(combine_df["build_year"]==1, np.nan,combine_df["build_year"])
 
+##Building a RF to predict missing build year 
+
+X_train=combine_df.drop(["build_year","price_doc","sub_area"],axis=1)[combine_df["build_year"].notnull()].reset_index(drop=True)
+X_train=X_train.drop(labels=col_drop,axis=1)
+y_train=combine_df["build_year"][combine_df["build_year"].notnull()]
+X_test=combine_df.drop(["build_year","price_doc"],axis=1)[combine_df["build_year"].isnull()]
+
+rf_by=RGR( n_estimators = 500, max_leaf_nodes = 16, n_jobs =-1)
+rf_by.fit(X_train,y_train) 
+
+
  # drop Hospital beds rion hospital_beds_raion
 
 combine_df = combine_df.drop([ "cafe_sum_500_min_price_avg"], axis = 1)
@@ -241,12 +259,11 @@ ax=sns.lmplot(x="life_sq",y="price_doc",data=tmp)
  
 combine_df["full_sq"]=np.where(combine_df["life_sq"]>combine_df["full_sq"],combine_df["life_sq"],combine_df["full_sq"])
 
-## Full_sq has houses with 0. Convert them to NA
- 
-tmp= combine_df[combine_df["full_sq"]==0] 
- 
- 
- 
+## One house has full_sq and life_sq as 0. Drop this row
+
+combine_df=combine_df.drop(combine_df["index"][combine_df["full_sq"]==0],axis=0).reset_index(drop=True)
+   
+
  ## life_sq
  #If life_sq = 0 then its not a residential property
  
@@ -255,9 +272,9 @@ combine_df[combine_df["life_sq"]==0]["index"].count()
 combine_df[combine_df["life_sq"].isnull()]["index"].count()
 
 #49 properties with 0 life_sq -
-#7559 properties with life_sq as null. Make the 0 to NA. 
+#7559 properties with life_sq as null 
 
-combine_df["life_sq"]=np.where(combine_df["life_sq"]==0,np.nan,combine_df["life_sq"])
+combine_df["num_room"]=train_df["num_room"].append(test_df["num_room"],ignore_index=True)
 
 bins=[0,1,10,20,30,40,50,60,70,80,90,100,200,300,400,500,1000,1500,2000,3000,4000,5000,80000]
 combine_df.groupby(pd.cut(combine_df["life_sq"],bins,right=False))["life_sq"].count()
